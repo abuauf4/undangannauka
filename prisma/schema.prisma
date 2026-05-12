@@ -1,0 +1,191 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String?
+  email         String   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?  // hashed, for credentials provider
+  phone         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  accounts    Account[]
+  sessions    Session[]
+  invitations Invitation[]
+  templates   Template[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Invitation {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  templateId  String
+  userId      String?
+
+  // Mempelai
+  namaPria      String
+  namaWanita    String
+  namaOrtuPria  String?
+  namaOrtuWanita String?
+  fotoPria      String?
+  fotoWanita    String?
+
+  // Acara
+  tanggalAkad     String?
+  waktuAkad       String?
+  lokasiAkad      String?
+  alamatAkad      String?
+  mapsAkadUrl     String?
+
+  tanggalResepsi  String?
+  waktuResepsi    String?
+  lokasiResepsi   String?
+  alamatResepsi   String?
+  mapsResepsiUrl  String?
+
+  // Personalisasi
+  nuansa        String?
+  adat          String?   // jawa | sunda | batak | bali | arab | jepang | china | minang | bugis | palembang
+  tingkat       String?   // mewah | simple | luxury | classic | modern | rustic | bohemian
+  greeting      String?
+  ayatQuote     String?
+  musikUrl      String?
+  fotoGallery   String?   // JSON string: string[]
+  fotoBackground String?  // Background couple photo URL/base64
+
+  // Fitur Tambahan (stored as JSON strings)
+  ourStory            String?   // JSON: { date: string; title: string; description: string; icon: string }[]
+  loveQuotes          String?   // JSON: { text: string; source?: string }[]
+  bridesmaidGroomsman String?   // JSON: { bridesmaids: { name: string; role?: string }[]; groomsmen: { name: string; role?: string }[] }
+  weddingItinerary    String?   // JSON: { time: string; event: string; description: string }[]
+  welcomeVideo        String?   // Video URL
+  amplopDigital       String?   // JSON: { bank: string; accountNumber: string; accountHolder: string }[]
+
+  // Payment
+  isPaid        Boolean  @default(false)
+  paymentId     String?   // Midtrans transaction ID
+
+  // Meta
+  isPublished   Boolean  @default(false)
+  viewCount     Int      @default(0)
+  rsvpCount     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  user          User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guests        Guest[]
+  guestbook     GuestbookEntry[]
+}
+
+model Guest {
+  id            String   @id @default(cuid())
+  invitationId  String
+  name          String
+  email         String?
+  phone         String?
+  status        String   @default("pending") // pending | attending | not_attending
+  guestCount    Int      @default(1)
+  message       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  invitation    Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+}
+
+model GuestbookEntry {
+  id            String   @id @default(cuid())
+  invitationId  String
+  name          String
+  message       String
+  isHidden      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  invitation    Invitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+}
+
+// File storage — stores uploaded files directly in PostgreSQL
+// Bypasses Supabase Storage API (which may have invalid/expired keys)
+model StorageFile {
+  id          String   @id @default(cuid())
+  path        String   @unique  // e.g. "inv-123/photo-pria.jpg"
+  mimeType    String              // e.g. "image/jpeg", "audio/mpeg"
+  size        Int                 // File size in bytes
+  data        Bytes               // Binary file data
+
+  createdAt   DateTime @default(now())
+
+  @@index([path])
+}
+
+// ─── Template Builder Models ───
+// Users can create their own invitation templates by assembling
+// Javanese properties (wayang, batik, ornaments) section by section.
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  thumbnail   String?              // Preview image URL
+  nuansa      String   @default("islam")   // islam | umum
+  adat        String   @default("jawa")    // jawa | sunda | batak | bali | etc.
+  design      String   @default("mewah")   // mewah | simple | luxury | etc.
+  config      Json     @default("{}")      // Full template configuration (sections + elements)
+  isDefault   Boolean  @default(false)     // System templates can't be deleted
+  createdBy   String?                      // User ID who created (null = system)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  creator     User?    @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+}
